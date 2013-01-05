@@ -377,7 +377,7 @@ class Auth {
      * Generate sha256 hash for given data.
      *
      * @param mixed $to_hash Can be string or array of data
-     * @param string $mode Hash key to be used. Can be session, password or cookie.
+     * @param string $mode Hash key mode, accepted values are session, password and cookie
      * @return string 64 characters hash of has_key concat with the given data
      */
     protected function hash_sha256($to_hash, $mode = 'password') {
