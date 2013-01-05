@@ -327,7 +327,9 @@ class Auth {
     protected function check_cookie($cookie) {
         $cookie_array = explode(' ', $cookie);
 
-        // $cookie_array is expected to have two elements, user_id and token hash
+        /* $cookie_array is expected to have two elements, user_id and
+         * plain token.
+         */
         if(empty($cookie_array) || count($cookie_array) < 2)
             return false;
 
