@@ -10,29 +10,34 @@
  * @link	https://github.com/Marko-M/codeigniter-auth
  */
 class Auth {
+    // Codeigniter instance
     protected $CI;
-    protected $login_controller;
-    protected $hash_key;
+
+    // Configuration options
+    protected $config;
 
     /**
      * Initialize auth by loading neccesary libraries, helpers and config items.
      *
-     * @param array $override Override default configuration
+     * @param array $config Override default configuration
      */
     public function __construct($config = array()) {
         $this->CI = &get_instance();
 
         // Merge $config and config/auth.php $config
-        $config = array_merge (
+        $this->config = array_merge (
             array(
-                'auth_login_controller' => $this->CI->config->item('auth_login_controller'),
-                'auth_hash_key' => $this->CI->config->item('auth_hash_key')
+                'auth_login_controller' =>
+                    $this->CI->config->item('auth_login_controller'),
+                'auth_session_hash_key' =>
+                    $this->CI->config->item('auth_session_hash_key'),
+                'auth_password_hash_key' =>
+                    $this->CI->config->item('auth_password_hash_key'),
+                'auth_cookie_hash_key' =>
+                    $this->CI->config->item('auth_session_hash_key')
             ),
             $config
         );
-
-        $this->login_controller = $config['auth_login_controller'];
-        $this->hash_key = $config['auth_hash_key'];
 
         $this->CI->load->library('session');
         $this->CI->load->helper('cookie');
@@ -53,7 +58,8 @@ class Auth {
                         $this->CI->session->userdata('id'),
                         $this->CI->session->userdata('email'),
                         $this->CI->session->userdata('password_hash')
-                    )
+                    ),
+                    'session'
                 ) == $this->CI->session->userdata('hash')) {
 
                 return true;
@@ -90,7 +96,7 @@ class Auth {
         $this->CI->load->database();
 
         // Generate password hash
-        $password_hash = $this->hash_sha256($password);
+        $password_hash = $this->hash_sha256($password, 'password');
 
         $query = $this->CI->db->query(
             'SELECT
@@ -137,7 +143,7 @@ class Auth {
         $this->CI->load->database();
 
         // Generate password hash
-        $password_hash = $this->hash_sha256($password);
+        $password_hash = $this->hash_sha256($password, 'password');
 
         // Inserd credentials into database
         $query = $this->CI->db->query(
@@ -187,7 +193,7 @@ class Auth {
         'CREATE TABLE IF NOT EXISTS '.$this->CI->db->dbprefix.'Tokens (
             token_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
             token_user_id INT UNSIGNED NOT NULL,
-            token CHAR(64) NOT NULL,
+            token_hash CHAR(64) NOT NULL,
             PRIMARY KEY(token_id),
             FOREIGN KEY(token_user_id)
                 REFERENCES '.$this->CI->db->dbprefix.'Users(user_id)
@@ -225,7 +231,7 @@ class Auth {
             $this->CI->session->set_userdata('current_url', current_url());
         }
 
-        redirect(site_url($this->login_controller));
+        redirect(site_url($this->config['auth_login_controller']));
     }
 
     /**
@@ -258,7 +264,8 @@ class Auth {
                 $id,
                 $email,
                 $password_hash
-            )
+            ),
+            'session'
         );
 
         $this->CI->session->set_userdata(
@@ -282,22 +289,26 @@ class Auth {
         // Generate token
         $token = random_string('alnum', 64);
 
-        // Insert token into database
+        // Generate token hash
+        $token_hash = $this->hash_sha256($token, 'cookie');
+
+        // Insert token hash into database
         $this->CI->db->query(
             'INSERT INTO '.$this->CI->db->dbprefix.'Tokens (
                 token_user_id,
-                token
+                token_hash
             ) VALUES (
                 ?,
                 ?
             )',
             array(
                 $id,
-                $token
+                $token_hash
             )
         );
 
-        // Set remember_me cookie
+        /* Set remember_me cookie. Save plain token because we to be able to
+         * invalidate existing tokens (cookies) by changing cookie hash key. */
         set_cookie(
             array(
                 'name'   => 'remember_me',
@@ -316,7 +327,7 @@ class Auth {
     protected function check_cookie($cookie) {
         $cookie_array = explode(' ', $cookie);
 
-        // $cookie_array is expected to have two elements, user_id and token
+        // $cookie_array is expected to have two elements, user_id and token hash
         if(empty($cookie_array) || count($cookie_array) < 2)
             return false;
 
@@ -330,10 +341,13 @@ class Auth {
             FROM '.$this->CI->db->dbprefix.'Tokens
             JOIN '.$this->CI->db->dbprefix.'Users
                 ON token_user_id = user_id
-            WHERE token_user_id = ? AND token = ?',
+            WHERE token_user_id = ? AND token_hash = ?',
             array(
                 $cookie_array[0],
-                $cookie_array[1]
+
+                /* Use token hash to be able to invalidate existing
+                 * tokens (cookies) by changing cookie hash key. */
+                $this->hash_sha256($cookie_array[1], 'cookie')
             )
         );
 
@@ -364,10 +378,10 @@ class Auth {
      * @param mixed $to_hash Can be string or array of data
      * @return string 64 characters hash of has_key concat with the given data
      */
-    protected function hash_sha256($to_hash) {
+    protected function hash_sha256($to_hash, $mode = 'password') {
         if(is_array($to_hash))
             $to_hash = implode('', $to_hash);
 
-        return hash('sha256', $this->hash_key.$to_hash);
+        return hash('sha256', $this->config['auth_'.$mode.'_hash_key'].$to_hash);
     }
 }
