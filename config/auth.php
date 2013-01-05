@@ -3,8 +3,8 @@
 // Login controller used to redirect
 $config['auth_login_controller'] = 'login';
 
-// Encryption key used for hashing
-$config['auth_hash_key'] = '';
+// Hash key, change to invalidate all sessions and user registrations
+$config['auth_hash_key'] = '1234567';
 
 /* End of file auth.php */
 /* Location: ./application/config/auth.php */
